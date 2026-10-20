@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Virtual Exchange</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#121a2d;--line:#26334d;--muted:#91a0bb;--green:#29d391;--red:#ff647c;--blue:#7aa7ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#edf3ff;font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#0b1020ed;z-index:2}
+h1{font-size:18px;margin:0}small,.muted{color:var(--muted)}button,input,select{font:inherit;border-radius:9px;border:1px solid var(--line);padding:10px;background:#0d1527;color:#edf3ff}
+button{cursor:pointer;background:#1c2a45}button.primary{background:#315bd6;border-color:#315bd6}button.buy{background:#124a3a;border-color:#17654f}button.sell{background:#5b2335;border-color:#813247}
+main{max-width:1200px;margin:auto;padding:18px;display:grid;gap:14px;grid-template-columns:1.2fr 1fr}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0}.wide{grid-column:1/-1}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.spread{justify-content:space-between}.big{font-size:24px;font-weight:750}.green{color:var(--green)}.red{color:var(--red)}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:right;padding:9px 6px;border-bottom:1px solid var(--line)}th:first-child,td:first-child{text-align:left}tr:last-child td{border-bottom:0}
+.tabs{display:flex;gap:6px;margin-bottom:12px}.tabs button.active{background:#315bd6}
+#chart{width:100%;height:230px;display:block;background:#0c1425;border-radius:10px}
+input[type=number]{width:100%;min-width:0}label{display:grid;gap:5px;color:var(--muted);font-size:12px}.orderform{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.orderform button{grid-column:span 1}
+.notice{background:#1a2a42;border:1px solid #2a4268;padding:10px;border-radius:9px;color:#cbdcff;font-size:13px}
+#auth{max-width:440px;margin:40px auto;padding:20px}.hidden{display:none!important}
+@media(max-width:760px){main{grid-template-columns:1fr;padding:10px}.wide{grid-column:auto}header{padding:12px} .big{font-size:21px}}
+</style>
+</head>
+<body>
+<header><div><h1>▥ Virtual Exchange</h1><small>가상 기업 모의주식 거래소</small></div><div class="row"><span id="userLabel" class="muted">로그아웃 상태</span><button id="logoutBtn" class="hidden">로그아웃</button></div></header>
+<section id="auth" class="card">
+  <h2 id="authTitle">거래소 로그인</h2>
+  <p class="muted">공개 가입 · 가상머니 전용 · 실제 돈 거래 없음</p>
+  <label>이메일<input id="email" type="email" autocomplete="email" placeholder="you@example.com"></label><br>
+  <label>비밀번호<input id="password" type="password" autocomplete="current-password" minlength="8" placeholder="8자 이상"></label><br>
+  <div class="row"><button id="loginBtn" class="primary">로그인</button><button id="signupBtn">회원가입</button></div>
+  <p id="authMsg" class="muted"></p>
+  <div class="notice">Supabase 설정 전에는 로그인 기능이 작동하지 않습니다. 아래 README의 설정 단계를 먼저 진행하세요.</div>
+</section>
+<main id="app" class="hidden">
+  <section class="card">
+    <div class="row spread"><div><small>선택한 기업</small><h2 id="companyName">Aster Robotics</h2><small id="symbol">ASTR · 가상 기업</small></div><select id="stockSelect" aria-label="주식 선택"></select></div>
+    <div class="row spread" style="margin:12px 0"><div><div class="big" id="price">₩25,000</div><div id="change" class="green">가상 시장</div></div><div style="text-align:right"><small>내 총자산</small><div class="big" id="netWorth">₩300,000</div></div></div>
+    <canvas id="chart" width="800" height="280"></canvas>
+    <p class="muted">데모 차트는 저장된 가격 기록을 표시합니다. 실시간 체결 차트는 주문 체결 데이터가 쌓이면 확장할 수 있습니다.</p>
+  </section>
+  <section class="card">
+    <div class="row spread"><h2 style="margin:0">주문하기</h2><span class="muted">지정가 주문</span></div>
+    <div class="orderform">
+      <label>주문 가격 (₩)<input id="orderPrice" type="number" min="1" step="1"></label>
+      <label>수량<input id="orderQty" type="number" min="1" step="1" value="1"></label>
+      <button id="buyBtn" class="buy">매수 주문</button><button id="sellBtn" class="sell">매도 주문</button>
+    </div>
+    <p id="tradeMsg" class="muted"></p>
+    <div class="notice">주문은 서버에서 검증되어야 합니다. 이 화면은 Supabase 연결 후 DB 함수로 주문을 보내도록 설계된 스타터입니다.</div>
+    <h3>내 계좌</h3><div class="row spread"><span class="muted">사용 가능 현금</span><strong id="cash">₩300,000</strong></div>
+    <div class="row spread"><span class="muted">보유 주식</span><strong id="holding">0주</strong></div>
+  </section>
+  <section class="card">
+    <div class="row spread"><h2 style="margin:0">호가창</h2><small class="muted">매수 / 매도 대기 주문</small></div>
+    <table><thead><tr><th>구분</th><th>가격</th><th>수량</th></tr></thead><tbody id="book"><tr><td colspan="3" class="muted" style="text-align:center">호가 데이터가 여기에 표시됩니다.</td></tr></tbody></table>
+  </section>
+  <section class="card">
+    <div class="row spread"><h2 style="margin:0">내 주문</h2><button id="refreshBtn">새로고침</button></div>
+    <table><thead><tr><th>종목</th><th>구분</th><th>가격</th><th>수량</th><th>상태</th></tr></thead><tbody id="orders"><tr><td colspan="5" class="muted" style="text-align:center">주문 내역 없음</td></tr></tbody></table>
+  </section>
+  <section class="card">
+    <div class="row spread"><h2 style="margin:0">시장 뉴스</h2><small class="muted">관리자 발행</small></div>
+    <div id="newsList" class="muted">뉴스가 여기에 표시됩니다.</div>
+    <div id="adminNews" class="hidden">
+      <h3>관리자 뉴스 발행</h3>
+      <label>제목<input id="newsTitle" maxlength="120" placeholder="뉴스 제목"></label><br>
+      <label>본문<textarea id="newsBody" maxlength="5000" rows="4" placeholder="가상 시장 뉴스 내용"></textarea></label><br>
+      <button id="publishNewsBtn" class="primary">뉴스 발행</button>
+      <p id="newsMsg" class="muted"></p>
+    </div>
+  </section>
+  <section class="card wide">
+    <div class="row spread"><h2 style="margin:0">가상 기업</h2><small class="muted">초기 시드 데이터</small></div>
+    <div id="companies" class="row"></div>
+  </section>
+</main>
+<script type="module">
+/*
+  1) Supabase 프로젝트에서 schema.sql 실행
+  2) 아래 URL과 anon key를 입력
+  3) index.html을 정적 호스팅에 배포
+*/
+const SUPABASE_URL = "YOUR_SUPABASE_URL";
+const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+const $ = id => document.getElementById(id);
+let supabase = null, user = null, stocks = [], selectedStock = null;
+const won = n => "₩" + Number(n || 0).toLocaleString("ko-KR");
+const demoStocks = [
+ {symbol:"ASTR",name:"Aster Robotics",price:25000,change:1.8},
+ {symbol:"NOVA",name:"Nova Energy",price:18400,change:-0.7},
+ {symbol:"MINT",name:"Mint BioLabs",price:32600,change:3.2},
+ {symbol:"ORBT",name:"Orbit Mobility",price:12700,change:0.4},
+ {symbol:"LUMI",name:"Lumi Semicon",price:48100,change:-1.2},
+ {symbol:"WAVE",name:"Wave Media",price:9600,change:2.1}
+];
+function msg(id,t){$(id).textContent=t}
+function drawChart(price){
+ const c=$("chart"),ctx=c.getContext("2d"),w=c.width,h=c.height;
+ ctx.clearRect(0,0,w,h);ctx.strokeStyle="#26334d";ctx.lineWidth=1;
+ for(let i=1;i<5;i++){let y=h*i/5;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke()}
+ let v=price,pts=[];
+ for(let i=0;i<42;i++){v*=1+(Math.random()-.49)*.018;pts.push(v)}
+ const lo=Math.min(...pts)*.985,hi=Math.max(...pts)*1.015;
+ ctx.strokeStyle="#29d391";ctx.lineWidth=3;ctx.beginPath();
+ pts.forEach((p,i)=>{const x=i*w/(pts.length-1),y=h-((p-lo)/(hi-lo))*h*.8-h*.1;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();
+}
+function renderStocks(){
+ $("stockSelect").innerHTML=stocks.map(s=>`<option value="${s.id||s.symbol}">${s.symbol} · ${s.name}</option>`).join("");
+ $("companies").innerHTML=stocks.map(s=>`<button data-stock="${s.id||s.symbol}">${s.symbol} · ${s.name} · ${won(s.current_price||s.price)}</button>`).join("");
+ document.querySelectorAll("[data-stock]").forEach(b=>b.onclick=()=>selectStock(b.dataset.stock));
+ if(stocks.length)selectStock(stocks[0].id||stocks[0].symbol);
+}
+function selectStock(id){
+ selectedStock=stocks.find(s=>String(s.id||s.symbol)===String(id))||stocks[0]; if(!selectedStock)return;
+ $("stockSelect").value=selectedStock.id||selectedStock.symbol;
+ $("companyName").textContent=selectedStock.name;$("symbol").textContent=selectedStock.symbol+" · 가상 기업";
+ const p=Number(selectedStock.current_price||selectedStock.price);
+ $("price").textContent=won(p);$("orderPrice").value=p;drawChart(p);
+}
+async function init(){
+ if(SUPABASE_URL.startsWith("YOUR_")){stocks=demoStocks;renderStocks();return}
+ const {createClient}=await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
+ supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+ const {data:{session}}=await supabase.auth.getSession(); user=session?.user||null;
+ supabase.auth.onAuthStateChange((_e,s)=>{user=s?.user||null;showAuth();if(user)loadMarket()});
+ supabase.channel("market-live").on("postgres_changes",{event:"*",schema:"public",table:"stocks"},()=>loadMarket()).on("postgres_changes",{event:"*",schema:"public",table:"orders"},()=>loadMarket()).on("postgres_changes",{event:"*",schema:"public",table:"news"},()=>loadNews()).subscribe();
+ showAuth();
+ if(user)await loadMarket();
+}
+function showAuth(){
+ $("auth").classList.toggle("hidden",!!user);$("app").classList.toggle("hidden",!user);
+ $("logoutBtn").classList.toggle("hidden",!user);$("userLabel").textContent=user?(user.email||"로그인됨"):"로그아웃 상태";
+}
+$("signupBtn").onclick=async()=>{
+ if(!supabase)return msg("authMsg","먼저 README에서 Supabase URL과 anon key를 설정하세요.");
+ const {error}=await supabase.auth.signUp({email:$("email").value,password:$("password").value});
+ msg("authMsg",error?error.message:"가입 요청 완료. 이메일 확인이 필요할 수 있습니다.");
+};
+$("loginBtn").onclick=async()=>{
+ if(!supabase)return msg("authMsg","먼저 README에서 Supabase URL과 anon key를 설정하세요.");
+ const {error}=await supabase.auth.signInWithPassword({email:$("email").value,password:$("password").value});
+ msg("authMsg",error?error.message:"로그인 성공");
+};
+$("logoutBtn").onclick=async()=>{if(supabase)await supabase.auth.signOut()};
+$("stockSelect").onchange=e=>selectStock(e.target.value);
+$("refreshBtn").onclick=()=>loadMarket();
+async function loadMarket(){
+ if(!supabase){renderStocks();return}
+ const {data,error}=await supabase.from("stocks").select("*").order("symbol");
+ if(error){msg("tradeMsg","주식 조회 실패: "+error.message);return}
+ stocks=data||[];renderStocks();
+ const {data:account}=await supabase.from("accounts").select("*").eq("user_id",user.id).maybeSingle();
+ if(account){$("cash").textContent=won(account.cash);$("netWorth").textContent=won(account.cash)}
+ const {data:profile}=await supabase.from("profiles").select("role").eq("id",user.id).maybeSingle();
+ $("adminNews").classList.toggle("hidden",profile?.role!=="admin");
+ await loadNews();
+ const {data:pos}=await supabase.from("positions").select("quantity").eq("user_id",user.id).eq("stock_id",selectedStock?.id).maybeSingle();
+ $("holding").textContent=(pos?.quantity||0).toLocaleString("ko-KR")+"주";
+ const {data:orders}=await supabase.from("orders").select("id,stock_id,side,limit_price,quantity,filled_quantity,status,stocks(symbol)").eq("user_id",user.id).order("created_at",{ascending:false}).limit(20);
+ $("orders").innerHTML=(orders||[]).map(o=>`<tr><td>${o.stocks?.symbol||"-"}</td><td>${o.side}</td><td>${won(o.limit_price)}</td><td>${o.filled_quantity}/${o.quantity}</td><td>${o.status}</td></tr>`).join("")||'<tr><td colspan="5">주문 내역 없음</td></tr>';
+ const {data:book}=await supabase.from("orders").select("side,limit_price,quantity,filled_quantity,status").eq("stock_id",selectedStock?.id).eq("status","open").order("limit_price",{ascending:false}).limit(20);
+ $("book").innerHTML=(book||[]).map(o=>`<tr><td class="${o.side==="buy"?"green":"red"}">${o.side==="buy"?"매수":"매도"}</td><td>${won(o.limit_price)}</td><td>${o.quantity-o.filled_quantity}</td></tr>`).join("")||'<tr><td colspan="3" style="text-align:center">대기 주문 없음</td></tr>';
+}
+async function loadNews(){
+ if(!supabase||!user)return;
+ const {data,error}=await supabase.from("news").select("id,title,body,created_at").eq("published",true).order("created_at",{ascending:false}).limit(20);
+ $("newsList").innerHTML=error?"뉴스를 불러오지 못했습니다.":(data||[]).map(n=>`<article style="padding:10px 0;border-bottom:1px solid var(--line)"><strong>${escapeHtml(n.title)}</strong><p style="white-space:pre-wrap;margin:6px 0">${escapeHtml(n.body)}</p><small>${new Date(n.created_at).toLocaleString("ko-KR")}</small></article>`).join("")||"아직 발행된 뉴스가 없습니다.";
+}
+function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+$("publishNewsBtn").onclick=async()=>{
+ const title=$("newsTitle").value.trim(),body=$("newsBody").value.trim();
+ if(!title||!body)return msg("newsMsg","제목과 본문을 입력하세요.");
+ const {error}=await supabase.rpc("publish_news",{p_title:title,p_body:body});
+ msg("newsMsg",error?"발행 실패: "+error.message:"뉴스를 발행했습니다.");
+ if(!error){$("newsTitle").value="";$("newsBody").value="";await loadNews();}
+};
+async function placeOrder(side){
+ if(!supabase||!user)return msg("tradeMsg","로그인과 Supabase 설정이 필요합니다.");
+ const price=Number($("orderPrice").value),qty=Number($("orderQty").value);
+ if(!selectedStock||!Number.isSafeInteger(price)||price<1||price%10!==0||!Number.isSafeInteger(qty)||qty<1)return msg("tradeMsg","가격은 10원 단위, 수량은 1주 이상의 정수여야 합니다.");
+ const {data,error}=await supabase.rpc("place_limit_order",{p_stock_id:selectedStock.id,p_side:side,p_limit_price:price,p_quantity:qty});
+ msg("tradeMsg",error?"주문 실패: "+error.message:"주문 접수 완료");
+ await loadMarket();
+}
+$("buyBtn").onclick=()=>placeOrder("buy");$("sellBtn").onclick=()=>placeOrder("sell");
+init();
+</script>
+</body></html>
